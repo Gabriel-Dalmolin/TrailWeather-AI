@@ -20,6 +20,13 @@ interface Point {
   lng: number;
 }
 
+interface Adversity {
+  position: number; // 0-1 representing position along route
+  type: string;
+  level: "safe" | "warning" | "danger";
+  description: string;
+}
+
 interface RouteMapProps {
   onRouteChange: (points: Point[], distance: number) => void;
 }
@@ -30,6 +37,8 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
   const [points, setPoints] = useState<Point[]>([]);
   const [markers, setMarkers] = useState<L.Marker[]>([]);
   const routingControlRef = useRef<L.Routing.Control | null>(null);
+  const [adversities, setAdversities] = useState<Adversity[]>([]);
+  const segmentLinesRef = useRef<L.Polyline[]>([]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -67,6 +76,10 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
       mapRef.current.removeControl(routingControlRef.current);
       routingControlRef.current = null;
     }
+
+    // Clear existing segment lines
+    segmentLinesRef.current.forEach((line) => line.remove());
+    segmentLinesRef.current = [];
 
     if (points.length === 0) {
       setMarkers([]);
@@ -121,6 +134,14 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         if (routes && routes.length > 0) {
           const route = routes[0];
           const distanceKm = route.summary.totalDistance / 1000;
+          
+          // Generate simulated adversities
+          const simulatedAdversities = generateAdversities();
+          setAdversities(simulatedAdversities);
+          
+          // Draw colored segments based on adversities
+          drawColoredSegments(route, simulatedAdversities);
+          
           onRouteChange(points, distanceKm);
         }
       });
@@ -152,6 +173,129 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
     }
   };
 
+  const generateAdversities = (): Adversity[] => {
+    const adversityTypes = [
+      { type: "Terreno íngreme", levels: ["warning", "danger"] },
+      { type: "Área alagável", levels: ["warning", "danger"] },
+      { type: "Vento forte", levels: ["warning", "danger"] },
+      { type: "Temperatura elevada", levels: ["warning", "danger"] },
+      { type: "Passagem de rio", levels: ["warning", "danger"] },
+      { type: "Área exposta", levels: ["warning", "danger"] },
+      { type: "Trilha irregular", levels: ["safe", "warning"] },
+    ];
+
+    const numAdversities = Math.floor(Math.random() * 4) + 2; // 2-5 adversities
+    const adversities: Adversity[] = [];
+
+    for (let i = 0; i < numAdversities; i++) {
+      const position = Math.random();
+      const adversityType = adversityTypes[Math.floor(Math.random() * adversityTypes.length)];
+      const level = adversityType.levels[Math.floor(Math.random() * adversityType.levels.length)] as "safe" | "warning" | "danger";
+      
+      adversities.push({
+        position,
+        type: adversityType.type,
+        level,
+        description: `${adversityType.type} detectado`,
+      });
+    }
+
+    return adversities.sort((a, b) => a.position - b.position);
+  };
+
+  const drawColoredSegments = (route: any, adversities: Adversity[]) => {
+    if (!mapRef.current) return;
+
+    const coordinates = route.coordinates;
+    if (!coordinates || coordinates.length < 2) return;
+
+    // Clear existing segment lines
+    segmentLinesRef.current.forEach((line) => line.remove());
+    segmentLinesRef.current = [];
+
+    // Create segments based on adversities
+    const segments: { start: number; end: number; level: "safe" | "warning" | "danger" }[] = [];
+    
+    if (adversities.length === 0) {
+      segments.push({ start: 0, end: 1, level: "safe" });
+    } else {
+      // Add segment before first adversity
+      if (adversities[0].position > 0) {
+        segments.push({ start: 0, end: adversities[0].position, level: "safe" });
+      }
+
+      // Add segments for each adversity
+      adversities.forEach((adv, idx) => {
+        const startPos = adv.position;
+        const endPos = idx < adversities.length - 1 ? adversities[idx + 1].position : 1;
+        const segmentLength = 0.1; // Each adversity affects 10% of the route
+        
+        // Adversity segment
+        segments.push({ 
+          start: startPos, 
+          end: Math.min(startPos + segmentLength, endPos), 
+          level: adv.level 
+        });
+        
+        // Safe segment after adversity (if there's space)
+        if (startPos + segmentLength < endPos) {
+          segments.push({ 
+            start: startPos + segmentLength, 
+            end: endPos, 
+            level: "safe" 
+          });
+        }
+      });
+    }
+
+    const colorMap = {
+      safe: "#10b981", // green
+      warning: "#f59e0b", // amber
+      danger: "#ef4444", // red
+    };
+
+    // Draw each segment
+    segments.forEach((segment) => {
+      const startIdx = Math.floor(segment.start * (coordinates.length - 1));
+      const endIdx = Math.ceil(segment.end * (coordinates.length - 1));
+      const segmentCoords = coordinates.slice(startIdx, endIdx + 1);
+
+      if (segmentCoords.length >= 2) {
+        const polyline = L.polyline(
+          segmentCoords.map((c: any) => [c.lat, c.lng]),
+          {
+            color: colorMap[segment.level],
+            weight: 6,
+            opacity: 0.8,
+          }
+        ).addTo(mapRef.current!);
+
+        segmentLinesRef.current.push(polyline);
+      }
+    });
+
+    // Add markers for adversities
+    adversities.forEach((adv) => {
+      const idx = Math.floor(adv.position * (coordinates.length - 1));
+      const coord = coordinates[idx];
+      
+      const icon = L.divIcon({
+        className: "adversity-marker",
+        html: `<div class="flex items-center justify-center w-6 h-6 ${
+          adv.level === "danger" ? "bg-red-500" : adv.level === "warning" ? "bg-amber-500" : "bg-green-500"
+        } text-white rounded-full border-2 border-white shadow-lg">⚠</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([coord.lat, coord.lng], { icon })
+        .addTo(mapRef.current!)
+        .bindPopup(`<strong>${adv.type}</strong><br/>${adv.description}`);
+
+      setMarkers((prev) => [...prev, marker]);
+    });
+  };
+
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full rounded-lg" />
@@ -179,13 +323,33 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 bg-card p-3 rounded-lg shadow-lg border border-border z-[1000]">
+      <div className="absolute bottom-4 left-4 bg-card p-3 rounded-lg shadow-lg border border-border z-[1000] max-w-xs">
         <p className="text-sm font-medium text-foreground">
           Pontos marcados: <span className="text-primary">{points.length}</span>
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Clique no mapa para adicionar pontos
         </p>
+        
+        {adversities.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <p className="text-xs font-semibold text-foreground mb-2">Legenda:</p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-xs text-muted-foreground">Seguro</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                <span className="text-xs text-muted-foreground">Atenção</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <span className="text-xs text-muted-foreground">Perigo</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
