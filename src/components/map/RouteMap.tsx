@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+import "leaflet-routing-machine";
 import { Button } from "@/components/ui/button";
 import { Trash2, Undo } from "lucide-react";
 import { toast } from "sonner";
@@ -27,7 +29,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [markers, setMarkers] = useState<L.Marker[]>([]);
-  const [polyline, setPolyline] = useState<L.Polyline | null>(null);
+  const routingControlRef = useRef<L.Routing.Control | null>(null);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -60,14 +62,14 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
     // Clear existing markers
     markers.forEach((marker) => marker.remove());
 
-    // Clear existing polyline
-    if (polyline) {
-      polyline.remove();
+    // Clear existing routing control
+    if (routingControlRef.current) {
+      mapRef.current.removeControl(routingControlRef.current);
+      routingControlRef.current = null;
     }
 
     if (points.length === 0) {
       setMarkers([]);
-      setPolyline(null);
       onRouteChange([], 0);
       return;
     }
@@ -92,28 +94,42 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
 
     setMarkers(newMarkers);
 
-    // Draw polyline
+    // Create route with routing machine
     if (points.length > 1) {
-      const latlngs = points.map((p) => [p.lat, p.lng] as [number, number]);
-      const newPolyline = L.polyline(latlngs, {
-        color: "#0ea5e9",
-        weight: 4,
-        opacity: 0.7,
+      const waypoints = points.map((p) => L.latLng(p.lat, p.lng));
+
+      const routingControl = (L.Routing as any).control({
+        waypoints,
+        routeWhileDragging: false,
+        addWaypoints: false,
+        fitSelectedRoutes: false,
+        showAlternatives: false,
+        lineOptions: {
+          styles: [{ color: "#0ea5e9", weight: 4, opacity: 0.7 }],
+          extendToWaypoints: true,
+          missingRouteTolerance: 0,
+        },
+        show: false,
+        createMarker: () => null,
       }).addTo(mapRef.current!);
 
-      setPolyline(newPolyline);
+      routingControlRef.current = routingControl;
 
-      // Calculate distance
-      let totalDistance = 0;
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = L.latLng(points[i].lat, points[i].lng);
-        const p2 = L.latLng(points[i + 1].lat, points[i + 1].lng);
-        totalDistance += p1.distanceTo(p2);
-      }
+      // Listen for route found
+      routingControl.on("routesfound", (e: any) => {
+        const routes = e.routes;
+        if (routes && routes.length > 0) {
+          const route = routes[0];
+          const distanceKm = route.summary.totalDistance / 1000;
+          onRouteChange(points, distanceKm);
+        }
+      });
 
-      // Convert to kilometers
-      const distanceKm = totalDistance / 1000;
-      onRouteChange(points, distanceKm);
+      // Handle routing errors
+      routingControl.on("routingerror", () => {
+        toast.error("Não foi possível calcular a rota");
+        onRouteChange(points, 0);
+      });
     } else {
       onRouteChange(points, 0);
     }
