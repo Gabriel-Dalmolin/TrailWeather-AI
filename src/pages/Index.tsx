@@ -13,13 +13,13 @@ interface Point {
 const WIZARD_STEPS = [
   {
     id: 1,
-    title: "Route",
-    description: "Draw the path",
+    title: "Schedule",
+    description: "Start date and time",
   },
   {
     id: 2,
-    title: "Schedule",
-    description: "Start date and time",
+    title: "Route",
+    description: "Draw the path",
   },
   {
     id: 3,
@@ -63,20 +63,12 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-hero">
       <Header />
-      
+
       <main className="container mx-auto px-4 py-8">
         <WizardSteps currentStep={currentStep} steps={WIZARD_STEPS} />
 
         <div className="max-w-5xl mx-auto">
           {currentStep === 1 && (
-            <RouteStep
-              onNext={handleNext}
-              onRouteChange={handleRouteChange}
-              routeData={routeData}
-            />
-          )}
-
-          {currentStep === 2 && (
             <DateTimeStep
               onNext={handleNext}
               onBack={handleBack}
@@ -86,9 +78,19 @@ const Index = () => {
             />
           )}
 
+          {currentStep === 2 && (
+            <RouteStep
+              onNext={handleNext}
+              onBack={handleBack}
+              onRouteChange={handleRouteChange}
+              routeData={routeData}
+            />
+          )}
+
           {currentStep === 3 && (
             <AnalysisDashboard
               onBack={handleReset}
+              distance={routeData.distance}
               routeData={routeData}
               dateTimeData={dateTimeData}
             />

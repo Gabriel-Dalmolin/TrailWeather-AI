@@ -1,19 +1,29 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  CloudRain, 
-  Thermometer, 
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CloudRain,
+  Thermometer,
   Wind,
   Droplets,
   Mountain,
   ArrowLeft,
   TrendingUp,
-  MapPin
+  MapPin,
+  Clock,
+  Droplet,
+  Sun,
+  Umbrella,
 } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
 
 interface Point {
   lat: number;
@@ -22,6 +32,7 @@ interface Point {
 
 interface AnalysisDashboardProps {
   onBack: () => void;
+  distance: number;
   routeData: {
     points: Point[];
     distance: number;
@@ -32,7 +43,6 @@ interface AnalysisDashboardProps {
   };
 }
 
-// Mock data - in production this would come from weather APIs and AI analysis
 const mockWeatherData = {
   overallRisk: 35,
   alerts: [
@@ -40,8 +50,14 @@ const mockWeatherData = {
       id: 1,
       type: "warning",
       title: "Moderate rain expected",
-      description: "60% chance of rain between 2pm-4pm",
+      description: "60% chance of rain between 14:00-16:00",
       severity: "medium",
+      timeWindow: "14:00-16:00",
+      suggestions: [
+        "Use waterproof jacket and cover equipment",
+        "Avoid river crossings during the peak hour",
+        "Consider postponing exposed ridge sections between 14:00-16:00",
+      ],
     },
     {
       id: 2,
@@ -49,6 +65,11 @@ const mockWeatherData = {
       title: "High temperature",
       description: "Maximum of 32°C in the afternoon",
       severity: "low",
+      timeWindow: "12:00-17:00",
+      suggestions: [
+        "Carry extra water and electrolyte tablets",
+        "Start earlier to avoid hottest hours",
+      ],
     },
   ],
   criticalPoints: [
@@ -70,27 +91,66 @@ const mockWeatherData = {
     },
   ],
   recommendations: [
-    "Start trail 1 hour earlier to avoid intense heat",
-    "Bring rain gear and equipment protection",
-    "Increase water intake due to high temperature",
-    "Monitor weather conditions during the route",
+    { text: "Start trail 1 hour earlier to avoid intense heat", icon: <Sun />, priority: 1 },
+    { text: "Bring rain gear and equipment protection", icon: <Umbrella />, priority: 2 },
+    { text: "Increase water intake due to high temperature", icon: <Droplet />, priority: 1 },
+    { text: "Monitor weather conditions during the route", icon: <Thermometer />, priority: 3 },
   ],
+  metrics: {
+    temperature: 28,
+    rainChance: 60,
+    wind: 25,
+    humidity: 75,
+  },
 };
 
-const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboardProps) => {
-  const getRiskColor = (risk: number) => {
-    if (risk < 30) return "text-success";
-    if (risk < 60) return "text-warning";
-    return "text-destructive";
+const AnalysisDashboard = ({ onBack, distance, routeData, dateTimeData }: AnalysisDashboardProps) => {
+  const [expandedAlert, setExpandedAlert] = useState<number | null>(null);
+  const [checkedRecommendations, setCheckedRecommendations] = useState<number[]>([]);
+
+  const avgSpeed = 4.5;
+  const estimatedHours = distance / avgSpeed;
+  const hours = Math.floor(estimatedHours);
+  const minutes = Math.round((estimatedHours - hours) * 60);
+
+  const risk = mockWeatherData.overallRisk;
+
+  const getRiskSemantic = (r: number) => {
+    if (r < 30) return { label: "Low", color: "green" };
+    if (r < 60) return { label: "Medium", color: "yellow" };
+    return { label: "High", color: "red" };
   };
 
-  const getRiskBadge = (risk: number) => {
-    if (risk < 30) return { variant: "default" as const, label: "Low", class: "bg-success" };
-    if (risk < 60) return { variant: "default" as const, label: "Medium", class: "bg-warning" };
-    return { variant: "destructive" as const, label: "High", class: "bg-destructive" };
+  const riskSemantic = getRiskSemantic(risk);
+
+  const getBadgeClasses = (r: number) => {
+    if (r < 30) return "bg-green-100 text-green-800";
+    if (r < 60) return "bg-yellow-100 text-yellow-800";
+    return "bg-red-100 text-red-800";
   };
 
-  const riskBadge = getRiskBadge(mockWeatherData.overallRisk);
+  const getTextColor = (r: number) => {
+    if (r < 30) return "text-green-600";
+    if (r < 60) return "text-yellow-600";
+    return "text-red-600";
+  };
+
+  const interpretRisk = (r: number) => {
+    if (r < 30)
+      return "Low risk: favorable conditions with reduced chance of accidents; maintain standard precautions.";
+    if (r < 60)
+      return "Medium risk: minor incidents possible. Take precautions (waterproof gear, avoid exposed areas during alerts).";
+    return "High risk: dangerous conditions — consider postponing or strictly follow safety recommendations.";
+  };
+
+  const toggleRecommendation = (index: number) => {
+    setCheckedRecommendations(prev =>
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
+
+  const newDate = new Date(dateTimeData.startDate);
+  newDate.setDate(newDate.getDate() + 1);
 
   return (
     <div className="space-y-6">
@@ -102,35 +162,39 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             Overall Route Analysis
           </CardTitle>
           <CardDescription>
-            Complete weather analysis for {new Date(dateTimeData.startDate).toLocaleDateString('en-US')} at {dateTimeData.startTime}
+            Complete weather analysis for {new Date(newDate).toLocaleDateString("en-US")} at {dateTimeData.startTime}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm text-muted-foreground mb-1">Risk Score</p>
-              <p className={`text-4xl font-bold ${getRiskColor(mockWeatherData.overallRisk)}`}>
-                {mockWeatherData.overallRisk}/100
-              </p>
+              <p className={`text-4xl font-bold ${getTextColor(risk)}`}>{risk}/100</p>
+              <div className="mt-2 text-sm text-muted-foreground max-w-xl">
+                <strong>What this means:</strong>
+                <p className="mt-1">{interpretRisk(risk)}</p>
+              </div>
             </div>
-            <Badge className={riskBadge.class}>
-              {riskBadge.label} Risk
-            </Badge>
+            <div className="text-right">
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getBadgeClasses(risk)}`}>
+                {riskSemantic.label} Risk
+              </span>
+            </div>
           </div>
-          <Progress value={mockWeatherData.overallRisk} className="h-2" />
-          
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <div className="p-3 bg-muted rounded-lg">
-              <p className="text-xs text-muted-foreground">Distance</p>
-              <p className="text-lg font-bold text-primary">{routeData.distance.toFixed(2)} km</p>
-            </div>
-            <div className="p-3 bg-muted rounded-lg">
-              <p className="text-xs text-muted-foreground">Analyzed Points</p>
-              <p className="text-lg font-bold text-secondary">{mockWeatherData.criticalPoints.length}</p>
-            </div>
+          <div aria-hidden className="w-full rounded-full h-3 bg-gray-200 overflow-hidden">
+            <div className="h-full transition-[width]" style={{ width: `${risk}%`, background: "linear-gradient(90deg, #34D399 0%, #FBBF24 50%, #F87171 100%)" }} />
           </div>
         </CardContent>
       </Card>
+
+      {/* Duration */}
+      {distance > 0 && (
+        <div className="p-4 bg-gradient-to-r from-primary to-secondary rounded-lg text-primary-foreground">
+          <p className="text-sm font-medium mb-2">Estimated Duration</p>
+          <p className="text-3xl font-bold">{hours}h {minutes}min</p>
+          <p className="text-xs mt-2 opacity-90">Based on average speed of {avgSpeed} km/h and distance of {distance.toFixed(2)} km</p>
+        </div>
+      )}
 
       {/* Alerts */}
       <Card>
@@ -141,32 +205,29 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {mockWeatherData.alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`p-4 rounded-lg border ${
-                alert.severity === "high"
-                  ? "bg-destructive/10 border-destructive"
-                  : alert.severity === "medium"
-                  ? "bg-warning/10 border-warning"
-                  : "bg-muted border-border"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                {alert.severity === "high" ? (
-                  <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
-                ) : alert.severity === "medium" ? (
-                  <CloudRain className="h-5 w-5 text-warning mt-0.5" />
-                ) : (
-                  <CheckCircle2 className="h-5 w-5 text-success mt-0.5" />
-                )}
-                <div className="flex-1">
-                  <p className="font-semibold text-sm">{alert.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{alert.description}</p>
+          {mockWeatherData.alerts.map(alert => {
+            const isOpen = expandedAlert === alert.id;
+            return (
+              <div key={alert.id} onClick={() => setExpandedAlert(isOpen ? null : alert.id)} className={`p-4 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 transition-colors ${alert.severity === 'high' ? 'bg-red-50 border-red-200' : alert.severity === 'medium' ? 'bg-yellow-50 border-yellow-200' : 'bg-muted border-border'}`}>
+                <div className="flex items-start gap-3">
+                  {alert.severity === 'high' ? <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" /> : alert.severity === 'medium' ? <CloudRain className="h-5 w-5 text-yellow-600 mt-0.5" /> : <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">{alert.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{alert.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {alert.timeWindow && <div className="flex items-center text-xs text-muted-foreground gap-1"><Clock className="h-4 w-4" /><span>{alert.timeWindow}</span></div>}
+                        <Badge className={alert.severity === 'high' ? 'bg-red-100 text-red-800' : alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}>{alert.severity?.toUpperCase()}</Badge>
+                      </div>
+                    </div>
+                    {isOpen && <div className="mt-3 text-sm text-muted-foreground"><p className="mb-2">Safety Suggestions:</p><ul className="list-disc pl-5 space-y-1">{alert.suggestions.map((s, i) => <li key={i}>{s}</li>)}</ul></div>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -177,24 +238,14 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             <MapPin className="h-5 w-5 text-destructive" />
             Critical Points
           </CardTitle>
-          <CardDescription>
-            Locations requiring special attention on the route
-          </CardDescription>
+          <CardDescription>Locations requiring special attention along the route. Risk percentages indicate severity, not probability.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {mockWeatherData.criticalPoints.map((point) => (
-            <div
-              key={point.id}
-              className="p-4 border border-border rounded-lg hover:border-primary transition-colors"
-            >
+          {mockWeatherData.criticalPoints.map(point => (
+            <div key={point.id} className="p-4 border border-border rounded-lg hover:border-primary transition-colors">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  <Mountain className="h-4 w-4 text-primary" />
-                  {point.name}
-                </h4>
-                <Badge className={getRiskBadge(point.risk).class}>
-                  {point.risk}%
-                </Badge>
+                <h4 className="font-semibold text-sm flex items-center gap-2"><Mountain className="h-4 w-4 text-primary" />{point.name}</h4>
+                <Badge className={getBadgeClasses(point.risk)}>{point.risk}%</Badge>
               </div>
               <p className="text-xs text-muted-foreground">{point.conditions}</p>
             </div>
@@ -202,75 +253,55 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         </CardContent>
       </Card>
 
-      {/* Recommendations */}
+      {/* AI Recommendations */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-success" />
-            AI Recommendations
-          </CardTitle>
+          <CardTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-green-600" />AI Recommendations</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="space-y-2">
-            {mockWeatherData.recommendations.map((rec, index) => (
-              <li key={index} className="flex items-start gap-2">
-                <CheckCircle2 className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
-                <span className="text-sm text-muted-foreground">{rec}</span>
+            {mockWeatherData.recommendations.sort((a, b) => a.priority - b.priority).map((rec, index) => (
+              <li key={index} className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground flex items-center gap-2">{rec.icon}{rec.text}</span>
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
 
-      {/* Weather Metrics Grid */}
+      {/* Weather Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center">
-              <Thermometer className="h-8 w-8 text-destructive mb-2" />
-              <p className="text-2xl font-bold">28°C</p>
-              <p className="text-xs text-muted-foreground">Temperature</p>
-            </div>
+          <CardContent className="pt-6 flex flex-col items-center">
+            <Thermometer className="h-8 w-8 text-red-600 mb-2" />
+            <p className="text-2xl font-bold">{mockWeatherData.metrics.temperature}°C</p>
+            <p className="text-xs text-muted-foreground">Temperature</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center">
-              <CloudRain className="h-8 w-8 text-primary mb-2" />
-              <p className="text-2xl font-bold">60%</p>
-              <p className="text-xs text-muted-foreground">Rain</p>
-            </div>
+          <CardContent className="pt-6 flex flex-col items-center">
+            <CloudRain className="h-8 w-8 text-primary mb-2" />
+            <p className="text-2xl font-bold">{mockWeatherData.metrics.rainChance}%</p>
+            <p className="text-xs text-muted-foreground">Rain</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center">
-              <Wind className="h-8 w-8 text-accent mb-2" />
-              <p className="text-2xl font-bold">25 km/h</p>
-              <p className="text-xs text-muted-foreground">Wind</p>
-            </div>
+          <CardContent className="pt-6 flex flex-col items-center">
+            <Wind className={`h-8 w-8 mb-2 ${mockWeatherData.metrics.wind > 30 ? 'text-red-600' : 'text-accent'}`} />
+            <p className="text-2xl font-bold">{mockWeatherData.metrics.wind} km/h</p>
+            <p className="text-xs text-muted-foreground">Wind</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center text-center">
-              <Droplets className="h-8 w-8 text-secondary mb-2" />
-              <p className="text-2xl font-bold">75%</p>
-              <p className="text-xs text-muted-foreground">Humidity</p>
-            </div>
+          <CardContent className="pt-6 flex flex-col items-center">
+            <Droplets className="h-8 w-8 text-secondary mb-2" />
+            <p className="text-2xl font-bold">{mockWeatherData.metrics.humidity}%</p>
+            <p className="text-xs text-muted-foreground">Humidity</p>
           </CardContent>
         </Card>
       </div>
 
-      <Button
-        variant="outline"
-        onClick={onBack}
-        className="w-full"
-        size="lg"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        New Analysis
-      </Button>
+      <Button variant="outline" onClick={onBack} className="w-full" size="lg"><ArrowLeft className="mr-2 h-4 w-4" />New Analysis</Button>
     </div>
   );
 };

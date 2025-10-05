@@ -21,10 +21,6 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
   const [startTime, setStartTime] = useState(dateTimeData.startTime);
 
   // Calculate estimated duration based on average hiking speed (4.5 km/h)
-  const avgSpeed = 4.5;
-  const estimatedHours = distance / avgSpeed;
-  const hours = Math.floor(estimatedHours);
-  const minutes = Math.round((estimatedHours - hours) * 60);
 
   const handleContinue = () => {
     onDateTimeChange(startDate, startTime);
@@ -75,35 +71,14 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
             </div>
           </div>
 
-          {distance > 0 && (
-            <div className="p-4 bg-gradient-primary rounded-lg text-primary-foreground">
-              <p className="text-sm font-medium mb-2">Estimated Duration</p>
-              <p className="text-3xl font-bold">
-                {hours}h {minutes}min
-              </p>
-              <p className="text-xs mt-2 opacity-90">
-                Based on average speed of {avgSpeed} km/h and distance of {distance.toFixed(2)} km
-              </p>
-            </div>
-          )}
-
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onBack}
-              className="flex-1"
-              size="lg"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
             <Button
               onClick={handleContinue}
               disabled={!startDate || !startTime}
               className="flex-1"
               size="lg"
             >
-              Analyze Route
+              Select Route
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>

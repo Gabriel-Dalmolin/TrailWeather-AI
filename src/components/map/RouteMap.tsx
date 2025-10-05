@@ -20,8 +20,11 @@ interface Point {
   lng: number;
 }
 
+// agora adversities pertencem explicitamente a um segmento entre dois waypoints
 interface Adversity {
-  position: number; // 0-1 representing position along route
+  startPointIndex: number; // index do waypoint inicial do segmento
+  endPointIndex: number; // index do waypoint final do segmento (start+1 geralmente)
+  t: number; // 0-1 posição relativa ao segmento (0 = no início do segmento, 1 = fim)
   type: string;
   level: "safe" | "warning" | "danger";
   description: string;
@@ -30,6 +33,9 @@ interface Adversity {
 interface RouteMapProps {
   onRouteChange: (points: Point[], distance: number) => void;
 }
+
+const DEFAULT_CENTER: [number, number] = [-23.5505, -46.6333];
+const DEFAULT_ZOOM = 12;
 
 const RouteMap = ({ onRouteChange }: RouteMapProps) => {
   const mapRef = useRef<L.Map | null>(null);
@@ -40,35 +46,379 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
   const [adversities, setAdversities] = useState<Adversity[]>([]);
   const segmentLinesRef = useRef<L.Polyline[]>([]);
 
-  useEffect(() => {
+  // Adversity markers separados (para não confundir com os markers de pontos)
+  const adversityMarkersRef = useRef<L.Marker[]>([]);
+
+  // User location marker & accuracy circle
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const userCircleRef = useRef<L.Circle | null>(null);
+  const geoWatchIdRef = useRef<number | null>(null);
+
+  // Hover marker to show pin under mouse
+  const hoverMarkerRef = useRef<L.Marker | null>(null);
+
+  // Helper to create & initialize map
+  const createMap = (center: [number, number], zoom = DEFAULT_ZOOM) => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Initialize map
-    const map = L.map(mapContainerRef.current).setView([-23.5505, -46.6333], 12);
+    const map = L.map(mapContainerRef.current).setView(center, zoom);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map);
 
-    mapRef.current = map;
-
-    // Add click handler to map
+    // Click handler to add points
     map.on("click", (e: L.LeafletMouseEvent) => {
       const newPoint = { lat: e.latlng.lat, lng: e.latlng.lng };
       setPoints((prev) => [...prev, newPoint]);
     });
 
-    return () => {
-      map.remove();
-      mapRef.current = null;
+    // --- Hover pin logic: show a pin while pointer is over the map ---
+    const handleMouseMove = (e: L.LeafletMouseEvent) => {
+      const latlng = e.latlng;
+      if (!latlng) return;
+
+      // Create icon once
+      const icon = L.divIcon({
+        className: "hover-pin-marker",
+        html: `<div style="
+          width:18px;height:18px;border-radius:50% 50% 50% 0;
+          transform:rotate(-45deg);
+          background:#ef4444;
+          box-shadow:0 2px 6px rgba(0,0,0,0.3);
+          display:block;
+          "></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      });
+
+      if (!hoverMarkerRef.current) {
+        hoverMarkerRef.current = L.marker(latlng, {
+          icon,
+          interactive: false, // so it doesn't steal events
+          zIndexOffset: 1000,
+        }).addTo(map);
+      } else {
+        hoverMarkerRef.current.setLatLng(latlng);
+      }
     };
+
+    const handleMouseOut = () => {
+      if (hoverMarkerRef.current) {
+        try {
+          map.removeLayer(hoverMarkerRef.current);
+        } catch (e) {
+          // ignore if already removed
+        }
+        hoverMarkerRef.current = null;
+      }
+    };
+
+    map.on("mousemove", handleMouseMove);
+    // mouseout triggers when pointer leaves the map container
+    map.on("mouseout", handleMouseOut);
+
+    // Store map reference
+    mapRef.current = map;
+
+    // Ensure we remove hover marker and listeners on map removal / cleanup later.
+    // (The overall component cleanup removes the map; see useEffect cleanup.)
+  };
+
+  // Set or update "You are here" marker + accuracy circle
+  const setUserLocationOnMap = (lat: number, lng: number, accuracy?: number) => {
+    if (!mapRef.current) return;
+
+    const latlng = L.latLng(lat, lng);
+
+    // Marker
+    if (!userMarkerRef.current) {
+      const icon = L.divIcon({
+        className: "user-location-marker",
+        html:
+          `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;
+                        background:rgba(14,165,233,0.95);color:white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-weight:600;">
+            •
+          </div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      userMarkerRef.current = L.marker(latlng, { icon }).addTo(mapRef.current);
+    } else {
+      userMarkerRef.current.setLatLng(latlng);
+    }
+
+    // Accuracy circle (optional)
+    if (typeof accuracy === "number") {
+      if (!userCircleRef.current) {
+        userCircleRef.current = L.circle(latlng, {
+          radius: accuracy,
+          color: "rgba(14,165,233,0.25)",
+          fillColor: "rgba(14,165,233,0.12)",
+          weight: 1,
+        }).addTo(mapRef.current);
+      } else {
+        userCircleRef.current.setLatLng(latlng);
+        userCircleRef.current.setRadius(accuracy);
+      }
+    }
+  };
+
+  // Request location and initialize map accordingly
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    if ("geolocation" in navigator) {
+      // Prompt user for location. Use reasonable options.
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+
+          createMap([latitude, longitude], 13);
+
+          // Put user location marker and circle
+          setUserLocationOnMap(latitude, longitude, accuracy);
+
+          // Optionally start watching to update user position live
+          try {
+            const watchId = navigator.geolocation.watchPosition(
+              (pos) => {
+                const { latitude: la, longitude: lo, accuracy: acc } = pos.coords;
+                setUserLocationOnMap(la, lo, acc);
+              },
+              (err) => {
+                // non-fatal: just stop watching
+                console.debug("watchPosition error:", err);
+              },
+              { enableHighAccuracy: false, maximumAge: 5000, timeout: 10000 }
+            );
+            geoWatchIdRef.current = watchId;
+          } catch (e) {
+            // ignore watch errors in some environments
+            console.debug("watchPosition not supported or failed", e);
+          }
+        },
+        (error) => {
+          // Permission denied or other error -> fallback to default center
+          console.warn("Geolocation error, falling back to default:", error);
+          toast.warning("Localização não disponível — usando vista padrão do mapa.");
+          createMap(DEFAULT_CENTER, DEFAULT_ZOOM);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+    } else {
+      // Geolocation not supported
+      toast.warning("Navegador não suporta geolocalização — usando vista padrão.");
+      createMap(DEFAULT_CENTER, DEFAULT_ZOOM);
+    }
+
+    // Cleanup: remove map and clear watch if present
+    return () => {
+      if (geoWatchIdRef.current !== null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+        geoWatchIdRef.current = null;
+      }
+      if (mapRef.current) {
+        // remove any hover marker first
+        if (hoverMarkerRef.current) {
+          try {
+            mapRef.current.removeLayer(hoverMarkerRef.current);
+          } catch (e) {
+            /* ignore */
+          }
+          hoverMarkerRef.current = null;
+        }
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+      userMarkerRef.current = null;
+      userCircleRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Helper: find index of closest coordinate in route.coordinates to a lat/lng
+  const findClosestIndex = (coordinates: any[], lat: number, lng: number) => {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < coordinates.length; i++) {
+      const c = coordinates[i];
+      const dLat = c.lat - lat;
+      const dLng = c.lon !== undefined ? c.lon - lng : c.lng - lng; // depending on shape
+      const distSq = dLat * dLat + dLng * dLng;
+      if (distSq < bestDist) {
+        bestDist = distSq;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  };
+
+  // Gera adversities apenas para um segmento (startIndex -> endIndex)
+  const generateAdversitiesForSegment = (startIndex: number, endIndex: number): Adversity[] => {
+    const adversityTypes = [
+      { type: "Steep terrain", levels: ["warning", "danger"] },
+      { type: "Flood-prone area", levels: ["warning", "danger"] },
+      { type: "Strong wind", levels: ["warning", "danger"] },
+      { type: "High temperature", levels: ["warning", "danger"] },
+      { type: "River crossing", levels: ["warning", "danger"] },
+      { type: "Exposed area", levels: ["warning", "danger"] },
+      { type: "Irregular trail", levels: ["safe", "warning"] },
+    ];
+
+    const numAdversities = Math.floor(Math.random() * 4) + 2; // 2-5 adversities on this segment
+    const advs: Adversity[] = [];
+
+    for (let i = 0; i < numAdversities; i++) {
+      const t = Math.random(); // position relative to segment
+      const adversityType = adversityTypes[Math.floor(Math.random() * adversityTypes.length)];
+      const level = adversityType.levels[Math.floor(Math.random() * adversityType.levels.length)] as "safe" | "warning" | "danger";
+
+      advs.push({
+        startPointIndex: startIndex,
+        endPointIndex: endIndex,
+        t,
+        type: adversityType.type,
+        level,
+        description: `${adversityType.type} detected`,
+      });
+    }
+
+    // ordenar por t para estabilidade
+    return advs.sort((a, b) => a.t - b.t);
+  };
+
+  // Desenha segmentos coloridos e markers com base nas adversities (que são relativas a segmentos)
+  const drawColoredSegments = (route: any, adversitiesList: Adversity[]) => {
+    if (!mapRef.current) return;
+
+    const coordinates = route.coordinates;
+    if (!coordinates || coordinates.length < 2) return;
+
+    // Clear existing segment lines
+    segmentLinesRef.current.forEach((line) => line.remove());
+    segmentLinesRef.current = [];
+
+    // Clear existing adversity markers
+    adversityMarkersRef.current.forEach((m) => m.remove());
+    adversityMarkersRef.current = [];
+
+    // Mapeia cada adversity (segment + t) para um índice absoluto no array coordinates
+    const length = coordinates.length;
+    const mappedAdversities = adversitiesList.map((adv) => {
+      // pontos do segmento (user-defined points)
+      const startPt = points[adv.startPointIndex];
+      const endPt = points[adv.endPointIndex];
+
+      // achar índices aproximados no route.coordinates que correspondem aos waypoints
+      const startIdx = findClosestIndex(coordinates, startPt.lat, startPt.lng);
+      const endIdx = findClosestIndex(coordinates, endPt.lat, endPt.lng);
+
+      // garantir ordem crescente
+      const segStart = Math.min(startIdx, endIdx);
+      const segEnd = Math.max(startIdx, endIdx);
+
+      // valor absoluto do índice da adversity
+      const advIdx = Math.round(segStart + adv.t * (segEnd - segStart));
+      const clampedAdvIdx = Math.max(0, Math.min(length - 1, advIdx));
+      const normalizedPos = clampedAdvIdx / (length - 1);
+
+      return {
+        ...adv,
+        advIdx: clampedAdvIdx,
+        normalizedPos,
+        coord: coordinates[clampedAdvIdx],
+      };
+    });
+
+    // Ordenar adversidades pela posição absoluta
+    mappedAdversities.sort((a, b) => a.advIdx - b.advIdx);
+
+    // Construir segmentos entre adversities para colorir
+    const segments: { startIdx: number; endIdx: number; level: "safe" | "warning" | "danger" }[] = [];
+
+    if (mappedAdversities.length === 0) {
+      segments.push({ startIdx: 0, endIdx: length - 1, level: "safe" });
+    } else {
+      // segmento antes da primeira adversity
+      if (mappedAdversities[0].advIdx > 0) {
+        segments.push({ startIdx: 0, endIdx: mappedAdversities[0].advIdx, level: "safe" });
+      }
+
+      // para cada adversity, adicionar segmento (ela mesma) e depois safe até a próxima adversity
+      const ADV_SEG_LEN = Math.max(1, Math.round((coordinates.length - 1) * 0.02)); // adversidade afeta ~2% dos pontos (ajustável)
+      for (let i = 0; i < mappedAdversities.length; i++) {
+        const adv = mappedAdversities[i];
+        const advStart = adv.advIdx;
+        const advEnd = Math.min(length - 1, advStart + ADV_SEG_LEN);
+
+        segments.push({ startIdx: advStart, endIdx: advEnd, level: adv.level });
+
+        const nextStart = advEnd + 1;
+        const nextAdvIdx = i < mappedAdversities.length - 1 ? mappedAdversities[i + 1].advIdx : null;
+        const safeEnd = nextAdvIdx !== null ? nextAdvIdx : length - 1;
+        if (nextStart <= safeEnd) {
+          segments.push({ startIdx: nextStart, endIdx: safeEnd, level: "safe" });
+        }
+      }
+    }
+
+    const colorMap: Record<string, string> = {
+      safe: "#10b981",
+      warning: "#f59e0b",
+      danger: "#ef4444",
+    };
+
+    // Desenhar segmentos
+    segments.forEach((segment) => {
+      const { startIdx, endIdx } = segment;
+      if (endIdx <= startIdx) return;
+      const segmentCoords = coordinates.slice(startIdx, endIdx + 1);
+      if (segmentCoords.length < 2) return;
+
+      const polyline = L.polyline(
+        segmentCoords.map((c: any) => [c.lat, c.lng]),
+        {
+          color: colorMap[segment.level],
+          weight: 6,
+          opacity: 0.8,
+        }
+      ).addTo(mapRef.current!);
+
+      segmentLinesRef.current.push(polyline);
+    });
+
+    // Adversity markers
+    mappedAdversities.forEach((adv) => {
+      const c = adv.coord;
+      const icon = L.divIcon({
+        className: "adversity-marker",
+        html: `<div class="flex items-center justify-center w-6 h-6 ${adv.level === "danger" ? "bg-red-500" : adv.level === "warning" ? "bg-amber-500" : "bg-green-500"
+          } text-white rounded-full border-2 border-white shadow-lg">⚠</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      const marker = L.marker([c.lat, c.lng], { icon })
+        .addTo(mapRef.current!)
+        .bindPopup(`<strong>${adv.type}</strong><br/>${adv.description}`);
+
+      adversityMarkersRef.current.push(marker);
+    });
+  };
+
+  // Routing / markers / adversities effect
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Clear existing markers
+    // Clear existing point markers (userMarker is NOT part of markers state)
     markers.forEach((marker) => marker.remove());
 
     // Clear existing routing control
@@ -77,17 +427,23 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
       routingControlRef.current = null;
     }
 
-    // Clear existing segment lines
+    // Clear existing segment lines (we will redraw later on routesfound)
     segmentLinesRef.current.forEach((line) => line.remove());
     segmentLinesRef.current = [];
 
+    // Do not clear adversity markers here — we'll redraw them in drawColoredSegments based on state
+    // But if no points, clear everything
     if (points.length === 0) {
       setMarkers([]);
+      // remove adversity markers and adversities state
+      adversityMarkersRef.current.forEach((m) => m.remove());
+      adversityMarkersRef.current = [];
+      setAdversities([]);
       onRouteChange([], 0);
       return;
     }
 
-    // Add new markers
+    // Add new markers for points
     const newMarkers = points.map((point, index) => {
       const marker = L.marker([point.lat, point.lng], {
         icon: L.divIcon({
@@ -134,14 +490,25 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         if (routes && routes.length > 0) {
           const route = routes[0];
           const distanceKm = route.summary.totalDistance / 1000;
-          
-          // Generate simulated adversities
-          const simulatedAdversities = generateAdversities();
-          setAdversities(simulatedAdversities);
-          
-          // Draw colored segments based on adversities
-          drawColoredSegments(route, simulatedAdversities);
-          
+
+          // Gerar adversities somente para o último segmento, se ainda não existirem
+          const lastStart = points.length - 2;
+          const lastEnd = points.length - 1;
+
+          setAdversities((prev) => {
+            const hasForLast = prev.some(
+              (a) => a.startPointIndex === lastStart && a.endPointIndex === lastEnd
+            );
+
+            const toAdd = hasForLast ? [] : generateAdversitiesForSegment(lastStart, lastEnd);
+            const updated = [...prev, ...toAdd];
+
+            // Desenhar imediatamente usando updated
+            drawColoredSegments(route, updated);
+
+            return updated;
+          });
+
           onRouteChange(points, distanceKm);
         }
       });
@@ -154,152 +521,63 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
     } else {
       onRouteChange(points, 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points]);
 
+  // Remove point and adapt adversities (drop those that referenced the removed point; shift indices)
   const handleRemovePoint = (index: number) => {
-    setPoints((prev) => prev.filter((_, i) => i !== index));
-    toast.success("Point removed");
+    setPoints((prevPts) => {
+      const newPts = prevPts.filter((_, i) => i !== index);
+
+      // Update adversities: remove those that referenced the removed point; shift indices > removed index
+      setAdversities((prevAdvs) => {
+        const updated: Adversity[] = [];
+        prevAdvs.forEach((adv) => {
+          if (adv.startPointIndex === index || adv.endPointIndex === index) {
+            // segment destroyed -> drop
+            return;
+          }
+          let s = adv.startPointIndex;
+          let e = adv.endPointIndex;
+          if (s > index) s--;
+          if (e > index) e--;
+          updated.push({ ...adv, startPointIndex: s, endPointIndex: e });
+        });
+        return updated;
+      });
+
+      toast.success("Point removed");
+      return newPts;
+    });
   };
 
   const handleClearAll = () => {
     setPoints([]);
+    // Clear adversities and markers
+    setAdversities([]);
+    adversityMarkersRef.current.forEach((m) => m.remove());
+    adversityMarkersRef.current = [];
     toast.info("Route cleared");
   };
 
   const handleUndo = () => {
     if (points.length > 0) {
-      setPoints((prev) => prev.slice(0, -1));
-      toast.success("Last point removed");
-    }
-  };
+      setPoints((prev) => {
+        const newPts = prev.slice(0, -1);
 
-  const generateAdversities = (): Adversity[] => {
-    const adversityTypes = [
-      { type: "Steep terrain", levels: ["warning", "danger"] },
-      { type: "Flood-prone area", levels: ["warning", "danger"] },
-      { type: "Strong wind", levels: ["warning", "danger"] },
-      { type: "High temperature", levels: ["warning", "danger"] },
-      { type: "River crossing", levels: ["warning", "danger"] },
-      { type: "Exposed area", levels: ["warning", "danger"] },
-      { type: "Irregular trail", levels: ["safe", "warning"] },
-    ];
+        // Remove adversities that referenced the last segment(s)
+        setAdversities((prevAdvs) => prevAdvs.filter((a) => a.endPointIndex < newPts.length));
 
-    const numAdversities = Math.floor(Math.random() * 4) + 2; // 2-5 adversities
-    const adversities: Adversity[] = [];
-
-    for (let i = 0; i < numAdversities; i++) {
-      const position = Math.random();
-      const adversityType = adversityTypes[Math.floor(Math.random() * adversityTypes.length)];
-      const level = adversityType.levels[Math.floor(Math.random() * adversityType.levels.length)] as "safe" | "warning" | "danger";
-      
-      adversities.push({
-        position,
-        type: adversityType.type,
-        level,
-        description: `${adversityType.type} detected`,
+        toast.success("Last point removed");
+        return newPts;
       });
     }
-
-    return adversities.sort((a, b) => a.position - b.position);
-  };
-
-  const drawColoredSegments = (route: any, adversities: Adversity[]) => {
-    if (!mapRef.current) return;
-
-    const coordinates = route.coordinates;
-    if (!coordinates || coordinates.length < 2) return;
-
-    // Clear existing segment lines
-    segmentLinesRef.current.forEach((line) => line.remove());
-    segmentLinesRef.current = [];
-
-    // Create segments based on adversities
-    const segments: { start: number; end: number; level: "safe" | "warning" | "danger" }[] = [];
-    
-    if (adversities.length === 0) {
-      segments.push({ start: 0, end: 1, level: "safe" });
-    } else {
-      // Add segment before first adversity
-      if (adversities[0].position > 0) {
-        segments.push({ start: 0, end: adversities[0].position, level: "safe" });
-      }
-
-      // Add segments for each adversity
-      adversities.forEach((adv, idx) => {
-        const startPos = adv.position;
-        const endPos = idx < adversities.length - 1 ? adversities[idx + 1].position : 1;
-        const segmentLength = 0.1; // Each adversity affects 10% of the route
-        
-        // Adversity segment
-        segments.push({ 
-          start: startPos, 
-          end: Math.min(startPos + segmentLength, endPos), 
-          level: adv.level 
-        });
-        
-        // Safe segment after adversity (if there's space)
-        if (startPos + segmentLength < endPos) {
-          segments.push({ 
-            start: startPos + segmentLength, 
-            end: endPos, 
-            level: "safe" 
-          });
-        }
-      });
-    }
-
-    const colorMap = {
-      safe: "#10b981", // green
-      warning: "#f59e0b", // amber
-      danger: "#ef4444", // red
-    };
-
-    // Draw each segment
-    segments.forEach((segment) => {
-      const startIdx = Math.floor(segment.start * (coordinates.length - 1));
-      const endIdx = Math.ceil(segment.end * (coordinates.length - 1));
-      const segmentCoords = coordinates.slice(startIdx, endIdx + 1);
-
-      if (segmentCoords.length >= 2) {
-        const polyline = L.polyline(
-          segmentCoords.map((c: any) => [c.lat, c.lng]),
-          {
-            color: colorMap[segment.level],
-            weight: 6,
-            opacity: 0.8,
-          }
-        ).addTo(mapRef.current!);
-
-        segmentLinesRef.current.push(polyline);
-      }
-    });
-
-    // Add markers for adversities
-    adversities.forEach((adv) => {
-      const idx = Math.floor(adv.position * (coordinates.length - 1));
-      const coord = coordinates[idx];
-      
-      const icon = L.divIcon({
-        className: "adversity-marker",
-        html: `<div class="flex items-center justify-center w-6 h-6 ${
-          adv.level === "danger" ? "bg-red-500" : adv.level === "warning" ? "bg-amber-500" : "bg-green-500"
-        } text-white rounded-full border-2 border-white shadow-lg">⚠</div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
-
-      const marker = L.marker([coord.lat, coord.lng], { icon })
-        .addTo(mapRef.current!)
-        .bindPopup(`<strong>${adv.type}</strong><br/>${adv.description}`);
-
-      setMarkers((prev) => [...prev, marker]);
-    });
   };
 
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full rounded-lg" />
-      
+
       {points.length > 0 && (
         <div className="absolute top-4 right-4 flex gap-2 z-[1000]">
           <Button
@@ -330,7 +608,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         <p className="text-xs text-muted-foreground mt-1">
           Click on the map to add points
         </p>
-        
+
         {adversities.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border">
             <p className="text-xs font-semibold text-foreground mb-2">Legend:</p>
