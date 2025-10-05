@@ -484,6 +484,14 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
 
       routingControlRef.current = routingControl;
 
+      if (routingControl.getContainer()) {
+        const container = routingControl.getContainer();
+        if (container.parentNode) {
+          container.parentNode.removeChild(container);
+        }
+      }
+
+
       // Listen for route found
       routingControl.on("routesfound", (e: any) => {
         const routes = e.routes;
