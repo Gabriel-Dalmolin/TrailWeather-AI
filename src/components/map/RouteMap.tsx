@@ -204,7 +204,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         (error) => {
           // Permission denied or other error -> fallback to default center
           console.warn("Geolocation error, falling back to default:", error);
-          toast.warning("Localização não disponível — usando vista padrão do mapa.");
+          toast.warning("Location not available — using standard map view.");
           createMap(DEFAULT_CENTER, DEFAULT_ZOOM);
         },
         {
@@ -215,7 +215,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
       );
     } else {
       // Geolocation not supported
-      toast.warning("Navegador não suporta geolocalização — usando vista padrão.");
+      toast.warning("Browser does not support geolocation — using standard view.");
       createMap(DEFAULT_CENTER, DEFAULT_ZOOM);
     }
 
