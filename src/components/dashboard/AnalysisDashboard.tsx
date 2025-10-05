@@ -39,41 +39,41 @@ const mockWeatherData = {
     {
       id: 1,
       type: "warning",
-      title: "Chuva moderada prevista",
-      description: "Possibilidade de 60% de chuva entre 14h-16h",
+      title: "Moderate rain expected",
+      description: "60% chance of rain between 2pm-4pm",
       severity: "medium",
     },
     {
       id: 2,
       type: "info",
-      title: "Temperatura elevada",
-      description: "Máxima de 32°C no período da tarde",
+      title: "High temperature",
+      description: "Maximum of 32°C in the afternoon",
       severity: "low",
     },
   ],
   criticalPoints: [
     {
       id: 1,
-      name: "Travessia de Rio",
+      name: "River Crossing",
       lat: -23.5505,
       lng: -46.6333,
       risk: 45,
-      conditions: "Nível do rio normal, sem chuvas upstream",
+      conditions: "Normal river level, no upstream rain",
     },
     {
       id: 2,
-      name: "Área Exposta",
+      name: "Exposed Area",
       lat: -23.5525,
       lng: -46.6343,
       risk: 25,
-      conditions: "Vento moderado de 25 km/h",
+      conditions: "Moderate wind of 25 km/h",
     },
   ],
   recommendations: [
-    "Iniciar trilha 1 hora mais cedo para evitar calor intenso",
-    "Levar capa de chuva e proteção para equipamentos",
-    "Aumentar consumo de água devido temperatura elevada",
-    "Monitorar condições climáticas durante o percurso",
+    "Start trail 1 hour earlier to avoid intense heat",
+    "Bring rain gear and equipment protection",
+    "Increase water intake due to high temperature",
+    "Monitor weather conditions during the route",
   ],
 };
 
@@ -85,9 +85,9 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
   };
 
   const getRiskBadge = (risk: number) => {
-    if (risk < 30) return { variant: "default" as const, label: "Baixo", class: "bg-success" };
-    if (risk < 60) return { variant: "default" as const, label: "Médio", class: "bg-warning" };
-    return { variant: "destructive" as const, label: "Alto", class: "bg-destructive" };
+    if (risk < 30) return { variant: "default" as const, label: "Low", class: "bg-success" };
+    if (risk < 60) return { variant: "default" as const, label: "Medium", class: "bg-warning" };
+    return { variant: "destructive" as const, label: "High", class: "bg-destructive" };
   };
 
   const riskBadge = getRiskBadge(mockWeatherData.overallRisk);
@@ -99,33 +99,33 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            Análise Geral da Rota
+            Overall Route Analysis
           </CardTitle>
           <CardDescription>
-            Análise completa das condições climáticas para {new Date(dateTimeData.startDate).toLocaleDateString('pt-BR')} às {dateTimeData.startTime}
+            Complete weather analysis for {new Date(dateTimeData.startDate).toLocaleDateString('en-US')} at {dateTimeData.startTime}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Score de Risco</p>
+              <p className="text-sm text-muted-foreground mb-1">Risk Score</p>
               <p className={`text-4xl font-bold ${getRiskColor(mockWeatherData.overallRisk)}`}>
                 {mockWeatherData.overallRisk}/100
               </p>
             </div>
             <Badge className={riskBadge.class}>
-              Risco {riskBadge.label}
+              {riskBadge.label} Risk
             </Badge>
           </div>
           <Progress value={mockWeatherData.overallRisk} className="h-2" />
           
           <div className="grid grid-cols-2 gap-4 mt-6">
             <div className="p-3 bg-muted rounded-lg">
-              <p className="text-xs text-muted-foreground">Distância</p>
+              <p className="text-xs text-muted-foreground">Distance</p>
               <p className="text-lg font-bold text-primary">{routeData.distance.toFixed(2)} km</p>
             </div>
             <div className="p-3 bg-muted rounded-lg">
-              <p className="text-xs text-muted-foreground">Pontos Analisados</p>
+              <p className="text-xs text-muted-foreground">Analyzed Points</p>
               <p className="text-lg font-bold text-secondary">{mockWeatherData.criticalPoints.length}</p>
             </div>
           </div>
@@ -137,7 +137,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-warning" />
-            Alertas e Avisos
+            Alerts and Warnings
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -175,10 +175,10 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-destructive" />
-            Pontos Críticos
+            Critical Points
           </CardTitle>
           <CardDescription>
-            Locais que requerem atenção especial no percurso
+            Locations requiring special attention on the route
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -207,7 +207,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
-            Recomendações da IA
+            AI Recommendations
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -229,7 +229,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             <div className="flex flex-col items-center text-center">
               <Thermometer className="h-8 w-8 text-destructive mb-2" />
               <p className="text-2xl font-bold">28°C</p>
-              <p className="text-xs text-muted-foreground">Temperatura</p>
+              <p className="text-xs text-muted-foreground">Temperature</p>
             </div>
           </CardContent>
         </Card>
@@ -238,7 +238,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             <div className="flex flex-col items-center text-center">
               <CloudRain className="h-8 w-8 text-primary mb-2" />
               <p className="text-2xl font-bold">60%</p>
-              <p className="text-xs text-muted-foreground">Chuva</p>
+              <p className="text-xs text-muted-foreground">Rain</p>
             </div>
           </CardContent>
         </Card>
@@ -247,7 +247,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             <div className="flex flex-col items-center text-center">
               <Wind className="h-8 w-8 text-accent mb-2" />
               <p className="text-2xl font-bold">25 km/h</p>
-              <p className="text-xs text-muted-foreground">Vento</p>
+              <p className="text-xs text-muted-foreground">Wind</p>
             </div>
           </CardContent>
         </Card>
@@ -256,7 +256,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
             <div className="flex flex-col items-center text-center">
               <Droplets className="h-8 w-8 text-secondary mb-2" />
               <p className="text-2xl font-bold">75%</p>
-              <p className="text-xs text-muted-foreground">Umidade</p>
+              <p className="text-xs text-muted-foreground">Humidity</p>
             </div>
           </CardContent>
         </Card>
@@ -269,7 +269,7 @@ const AnalysisDashboard = ({ onBack, routeData, dateTimeData }: AnalysisDashboar
         size="lg"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Nova Análise
+        New Analysis
       </Button>
     </div>
   );

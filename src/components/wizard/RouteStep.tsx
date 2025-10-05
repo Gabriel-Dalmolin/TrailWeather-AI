@@ -24,11 +24,11 @@ const RouteStep = ({ onNext, onRouteChange, routeData }: RouteStepProps) => {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Map className="h-5 w-5 text-primary" />
-            <CardTitle>Desenhe sua rota</CardTitle>
+            <CardTitle>Draw your route</CardTitle>
           </div>
           <CardDescription>
-            Clique no mapa para marcar pontos ao longo do percurso da sua trilha.
-            Conecte os pontos para criar o trajeto completo.
+            Click on the map to mark points along your trail.
+            Connect the points to create the complete route.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -40,13 +40,13 @@ const RouteStep = ({ onNext, onRouteChange, routeData }: RouteStepProps) => {
             <div className="mt-4 p-4 bg-muted rounded-lg">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Distância Total</p>
+                  <p className="text-sm text-muted-foreground">Total Distance</p>
                   <p className="text-2xl font-bold text-primary">
                     {routeData.distance.toFixed(2)} km
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Pontos Marcados</p>
+                  <p className="text-sm text-muted-foreground">Marked Points</p>
                   <p className="text-2xl font-bold text-secondary">
                     {routeData.points.length}
                   </p>
@@ -61,7 +61,7 @@ const RouteStep = ({ onNext, onRouteChange, routeData }: RouteStepProps) => {
             className="w-full mt-6"
             size="lg"
           >
-            Continuar para Horário
+            Continue to Schedule
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </CardContent>

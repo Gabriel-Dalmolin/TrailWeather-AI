@@ -148,7 +148,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
 
       // Handle routing errors
       routingControl.on("routingerror", () => {
-        toast.error("Não foi possível calcular a rota");
+        toast.error("Unable to calculate route");
         onRouteChange(points, 0);
       });
     } else {
@@ -158,30 +158,30 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
 
   const handleRemovePoint = (index: number) => {
     setPoints((prev) => prev.filter((_, i) => i !== index));
-    toast.success("Ponto removido");
+    toast.success("Point removed");
   };
 
   const handleClearAll = () => {
     setPoints([]);
-    toast.info("Rota limpa");
+    toast.info("Route cleared");
   };
 
   const handleUndo = () => {
     if (points.length > 0) {
       setPoints((prev) => prev.slice(0, -1));
-      toast.success("Último ponto removido");
+      toast.success("Last point removed");
     }
   };
 
   const generateAdversities = (): Adversity[] => {
     const adversityTypes = [
-      { type: "Terreno íngreme", levels: ["warning", "danger"] },
-      { type: "Área alagável", levels: ["warning", "danger"] },
-      { type: "Vento forte", levels: ["warning", "danger"] },
-      { type: "Temperatura elevada", levels: ["warning", "danger"] },
-      { type: "Passagem de rio", levels: ["warning", "danger"] },
-      { type: "Área exposta", levels: ["warning", "danger"] },
-      { type: "Trilha irregular", levels: ["safe", "warning"] },
+      { type: "Steep terrain", levels: ["warning", "danger"] },
+      { type: "Flood-prone area", levels: ["warning", "danger"] },
+      { type: "Strong wind", levels: ["warning", "danger"] },
+      { type: "High temperature", levels: ["warning", "danger"] },
+      { type: "River crossing", levels: ["warning", "danger"] },
+      { type: "Exposed area", levels: ["warning", "danger"] },
+      { type: "Irregular trail", levels: ["safe", "warning"] },
     ];
 
     const numAdversities = Math.floor(Math.random() * 4) + 2; // 2-5 adversities
@@ -196,7 +196,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
         position,
         type: adversityType.type,
         level,
-        description: `${adversityType.type} detectado`,
+        description: `${adversityType.type} detected`,
       });
     }
 
@@ -309,7 +309,7 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
             className="shadow-lg"
           >
             <Undo className="h-4 w-4 mr-1" />
-            Desfazer
+            Undo
           </Button>
           <Button
             size="sm"
@@ -318,34 +318,34 @@ const RouteMap = ({ onRouteChange }: RouteMapProps) => {
             className="shadow-lg"
           >
             <Trash2 className="h-4 w-4 mr-1" />
-            Limpar
+            Clear
           </Button>
         </div>
       )}
 
       <div className="absolute bottom-4 left-4 bg-card p-3 rounded-lg shadow-lg border border-border z-[1000] max-w-xs">
         <p className="text-sm font-medium text-foreground">
-          Pontos marcados: <span className="text-primary">{points.length}</span>
+          Marked points: <span className="text-primary">{points.length}</span>
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Clique no mapa para adicionar pontos
+          Click on the map to add points
         </p>
         
         {adversities.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border">
-            <p className="text-xs font-semibold text-foreground mb-2">Legenda:</p>
+            <p className="text-xs font-semibold text-foreground mb-2">Legend:</p>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-xs text-muted-foreground">Seguro</span>
+                <span className="text-xs text-muted-foreground">Safe</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                <span className="text-xs text-muted-foreground">Atenção</span>
+                <span className="text-xs text-muted-foreground">Warning</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-xs text-muted-foreground">Perigo</span>
+                <span className="text-xs text-muted-foreground">Danger</span>
               </div>
             </div>
           </div>

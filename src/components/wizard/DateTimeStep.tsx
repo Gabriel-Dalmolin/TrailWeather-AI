@@ -37,10 +37,10 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
         <CardHeader>
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
-            <CardTitle>Defina o horário da trilha</CardTitle>
+            <CardTitle>Set trail schedule</CardTitle>
           </div>
           <CardDescription>
-            Escolha a data e hora de início para obter análise climática precisa do percurso.
+            Choose the start date and time to get accurate weather analysis for your route.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -48,7 +48,7 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
             <div className="space-y-2">
               <Label htmlFor="startDate" className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                Data de Início
+                Start Date
               </Label>
               <Input
                 id="startDate"
@@ -63,7 +63,7 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
             <div className="space-y-2">
               <Label htmlFor="startTime" className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                Horário de Início
+                Start Time
               </Label>
               <Input
                 id="startTime"
@@ -77,12 +77,12 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
 
           {distance > 0 && (
             <div className="p-4 bg-gradient-primary rounded-lg text-primary-foreground">
-              <p className="text-sm font-medium mb-2">Estimativa de Duração</p>
+              <p className="text-sm font-medium mb-2">Estimated Duration</p>
               <p className="text-3xl font-bold">
                 {hours}h {minutes}min
               </p>
               <p className="text-xs mt-2 opacity-90">
-                Baseado em velocidade média de {avgSpeed} km/h e distância de {distance.toFixed(2)} km
+                Based on average speed of {avgSpeed} km/h and distance of {distance.toFixed(2)} km
               </p>
             </div>
           )}
@@ -95,7 +95,7 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
               size="lg"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
+              Back
             </Button>
             <Button
               onClick={handleContinue}
@@ -103,7 +103,7 @@ const DateTimeStep = ({ onNext, onBack, onDateTimeChange, distance, dateTimeData
               className="flex-1"
               size="lg"
             >
-              Analisar Rota
+              Analyze Route
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>

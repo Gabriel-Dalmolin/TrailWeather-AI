@@ -13,18 +13,18 @@ interface Point {
 const WIZARD_STEPS = [
   {
     id: 1,
-    title: "Rota",
-    description: "Desenhe o percurso",
+    title: "Route",
+    description: "Draw the path",
   },
   {
     id: 2,
-    title: "Horário",
-    description: "Data e hora de início",
+    title: "Schedule",
+    description: "Start date and time",
   },
   {
     id: 3,
-    title: "Análise",
-    description: "Resultados climáticos",
+    title: "Analysis",
+    description: "Weather results",
   },
 ];
 
